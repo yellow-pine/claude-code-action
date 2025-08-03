@@ -36,6 +36,7 @@ export async function checkWritePermissions(
     actor,
     eventName,
     inputs.trustedActors,
+    context,
   );
 
   if (!shouldCheckActor) {
@@ -59,29 +60,43 @@ function shouldCheckActorPermissions(
   actor: string,
   eventName: string,
   trustedActors: string[],
+  context: ParsedGitHubContext,
 ): boolean {
   // OIDC tokens always require actor check
   if (authContext.source === TokenSource.OIDC) {
     return true;
   }
 
-  // External tokens - check if this is a trusted actor scenario
-  // Only allow bypass if trusted actors are configured and conditions are met
-  if (
-    trustedActors.length > 0 &&
-    trustedActors.includes(actor) &&
-    eventName === 'pull_request'
-  ) {
-    core.info(
-      `Trusted actor detected: ${actor} on ${eventName} event - skipping actor permission check`,
-    );
-    return false;
+  // For external tokens with trusted actors configured
+  if (trustedActors.length > 0 && trustedActors.includes(actor)) {
+    // CRITICAL: Only bypass on pull_request (not pull_request_target)
+    if (eventName === "pull_request") {
+      // ADDITIONAL SECURITY: Verify PR author matches actor
+      const payload = context.payload as any;
+      const prAuthor = payload.pull_request?.user?.login;
+      if (prAuthor === actor) {
+        core.info(
+          `Trusted actor verified: ${actor} created PR on ${eventName} event - skipping actor permission check`,
+        );
+        return false;
+      } else {
+        core.warning(
+          `Actor ${actor} is trusted but didn't create the PR (created by ${prAuthor}) - requiring permission check`,
+        );
+      }
+    } else if (eventName === "pull_request_target") {
+      core.warning(
+        `Trusted actor ${actor} on pull_request_target event - actor check required for security`,
+      );
+    }
   }
 
   // All other external token cases require actor check
-  core.warning(
-    `External token provided but actor ${actor} is not a trusted actor - checking actor permissions`,
-  );
+  if (!trustedActors.includes(actor)) {
+    core.warning(
+      `External token provided but actor ${actor} is not a trusted actor - checking actor permissions`,
+    );
+  }
   return true;
 }
 
