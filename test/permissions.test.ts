@@ -2,11 +2,19 @@ import { describe, expect, test, spyOn, beforeEach, afterEach } from "bun:test";
 import * as core from "@actions/core";
 import { checkWritePermissions } from "../src/github/validation/permissions";
 import type { ParsedGitHubContext } from "../src/github/context";
+import { createAuthContext, TokenSource } from "../src/github/auth-context";
 
 describe("checkWritePermissions", () => {
   let coreInfoSpy: any;
   let coreWarningSpy: any;
   let coreErrorSpy: any;
+
+  // Reusable mock auth contexts
+  const mockOidcAuthContext = createAuthContext("test-token", TokenSource.OIDC);
+  const mockExternalAuthContext = createAuthContext(
+    "github-app-token",
+    TokenSource.EXTERNAL,
+  );
 
   beforeEach(() => {
     // Spy on core methods
@@ -21,11 +29,19 @@ describe("checkWritePermissions", () => {
     coreErrorSpy.mockRestore();
   });
 
-  const createMockOctokit = (permission: string) => {
+  const createMockOctokit = (
+    permission: string,
+    tokenPermissions?: { push?: boolean; admin?: boolean },
+  ) => {
     return {
       repos: {
         getCollaboratorPermissionLevel: async () => ({
           data: { permission },
+        }),
+        ...(tokenPermissions && {
+          get: async () => ({
+            data: { permissions: tokenPermissions },
+          }),
         }),
       },
     } as any;
@@ -73,16 +89,34 @@ describe("checkWritePermissions", () => {
       useStickyComment: false,
       additionalPermissions: new Map(),
       useCommitSigning: false,
+      trustedActors: [],
     },
   });
 
+  // === OIDC Token Tests (Success Cases) ===
   test("should return true for admin permissions", async () => {
-    const mockOctokit = createMockOctokit("admin");
+    const mockOctokit = createMockOctokit("admin", { push: true });
     const context = createContext();
 
-    const result = await checkWritePermissions(mockOctokit, context);
+    const result = await checkWritePermissions(
+      mockOctokit,
+      context,
+      mockOidcAuthContext,
+    );
 
     expect(result).toBe(true);
+    expect(coreInfoSpy).toHaveBeenCalledWith(
+      "Checking permissions with oidc token source",
+    );
+    expect(coreInfoSpy).toHaveBeenCalledWith(
+      "Checking token permissions for repository: test-owner/test-repo",
+    );
+    expect(coreInfoSpy).toHaveBeenCalledWith(
+      "Token permissions retrieved: push=true, admin=undefined",
+    );
+    expect(coreInfoSpy).toHaveBeenCalledWith(
+      "Token has write access: push=true, admin=undefined",
+    );
     expect(coreInfoSpy).toHaveBeenCalledWith(
       "Checking permissions for actor: test-user",
     );
@@ -93,36 +127,125 @@ describe("checkWritePermissions", () => {
   });
 
   test("should return true for write permissions", async () => {
-    const mockOctokit = createMockOctokit("write");
+    const mockOctokit = createMockOctokit("write", { push: true });
     const context = createContext();
 
-    const result = await checkWritePermissions(mockOctokit, context);
+    const result = await checkWritePermissions(
+      mockOctokit,
+      context,
+      mockOidcAuthContext,
+    );
 
     expect(result).toBe(true);
     expect(coreInfoSpy).toHaveBeenCalledWith("Actor has write access: write");
   });
 
+  // === OIDC Token Tests (Failure Cases) ===
   test("should return false for read permissions", async () => {
-    const mockOctokit = createMockOctokit("read");
+    const mockOctokit = createMockOctokit("read", { push: false });
     const context = createContext();
 
-    const result = await checkWritePermissions(mockOctokit, context);
+    const result = await checkWritePermissions(
+      mockOctokit,
+      context,
+      mockOidcAuthContext,
+    );
 
     expect(result).toBe(false);
+    // First check for token warning, then actor warning
     expect(coreWarningSpy).toHaveBeenCalledWith(
-      "Actor has insufficient permissions: read",
+      "Token has insufficient permissions",
     );
   });
 
   test("should return false for none permissions", async () => {
-    const mockOctokit = createMockOctokit("none");
+    const mockOctokit = createMockOctokit("none", { push: false });
     const context = createContext();
 
-    const result = await checkWritePermissions(mockOctokit, context);
+    const result = await checkWritePermissions(
+      mockOctokit,
+      context,
+      mockOidcAuthContext,
+    );
+
+    expect(result).toBe(false);
+    // First check for token warning, then actor warning
+    expect(coreWarningSpy).toHaveBeenCalledWith(
+      "Token has insufficient permissions",
+    );
+  });
+
+  test("should return false when token lacks write permissions", async () => {
+    const mockOctokit = createMockOctokit("write", {
+      push: false,
+      admin: false,
+    });
+    const context = createContext();
+
+    const result = await checkWritePermissions(
+      mockOctokit,
+      context,
+      mockOidcAuthContext,
+    );
 
     expect(result).toBe(false);
     expect(coreWarningSpy).toHaveBeenCalledWith(
-      "Actor has insufficient permissions: none",
+      "Token has insufficient permissions",
+    );
+  });
+
+  // === Error Handling Tests ===
+  test("should return false when token lacks read access (403)", async () => {
+    const error = new Error("Forbidden");
+    (error as any).status = 403;
+    const mockOctokit = {
+      repos: {
+        get: async () => {
+          throw error;
+        },
+        getCollaboratorPermissionLevel: async () => ({
+          data: { permission: "write" },
+        }),
+      },
+    } as any;
+    const context = createContext();
+
+    const result = await checkWritePermissions(
+      mockOctokit,
+      context,
+      mockOidcAuthContext,
+    );
+
+    expect(result).toBe(false);
+    expect(coreWarningSpy).toHaveBeenCalledWith(
+      "Token lacks read access to repository: Forbidden",
+    );
+  });
+
+  test("should return false when repository not found (404)", async () => {
+    const error = new Error("Not Found");
+    (error as any).status = 404;
+    const mockOctokit = {
+      repos: {
+        get: async () => {
+          throw error;
+        },
+        getCollaboratorPermissionLevel: async () => ({
+          data: { permission: "write" },
+        }),
+      },
+    } as any;
+    const context = createContext();
+
+    const result = await checkWritePermissions(
+      mockOctokit,
+      context,
+      mockOidcAuthContext,
+    );
+
+    expect(result).toBe(false);
+    expect(coreWarningSpy).toHaveBeenCalledWith(
+      "Token lacks read access to repository: Not Found",
     );
   });
 
@@ -130,6 +253,9 @@ describe("checkWritePermissions", () => {
     const error = new Error("API error");
     const mockOctokit = {
       repos: {
+        get: async () => ({
+          data: { permissions: { push: true } },
+        }),
         getCollaboratorPermissionLevel: async () => {
           throw error;
         },
@@ -137,7 +263,9 @@ describe("checkWritePermissions", () => {
     } as any;
     const context = createContext();
 
-    await expect(checkWritePermissions(mockOctokit, context)).rejects.toThrow(
+    expect(
+      checkWritePermissions(mockOctokit, context, mockOidcAuthContext),
+    ).rejects.toThrow(
       "Failed to check permissions for test-user: Error: API error",
     );
 
@@ -146,10 +274,249 @@ describe("checkWritePermissions", () => {
     );
   });
 
+  // === External Token Tests (New Behavior) ===
+  test("should skip actor check for Dependabot when configured as trusted", async () => {
+    // Mock token with write permissions but actor has no permissions
+    const mockOctokit = createMockOctokit("none", { push: true });
+    const context = createContext();
+    // Simulate Dependabot actor on pull_request event with trusted actors configured
+    context.actor = "dependabot[bot]";
+    context.eventName = "pull_request";
+    context.inputs.trustedActors = ["dependabot[bot]"];
+
+    const result = await checkWritePermissions(
+      mockOctokit,
+      context,
+      mockExternalAuthContext,
+    );
+
+    // Should pass because Dependabot is in trusted actors list
+    expect(result).toBe(true);
+    expect(coreInfoSpy).toHaveBeenCalledWith(
+      "Checking permissions with external token source",
+    );
+    expect(coreInfoSpy).toHaveBeenCalledWith(
+      "Trusted actor detected: dependabot[bot] on pull_request event - skipping actor permission check",
+    );
+    // Actor check should NOT be called for Dependabot
+    expect(coreInfoSpy).not.toHaveBeenCalledWith(
+      "Checking permissions for actor: dependabot[bot]",
+    );
+  });
+
+  test("should check actor permissions for Dependabot when not in trusted list", async () => {
+    // Mock token with write permissions but actor has no permissions
+    const mockOctokit = createMockOctokit("none", { push: true });
+    const context = createContext();
+    // Dependabot on pull_request but NOT in trusted actors (empty list)
+    context.actor = "dependabot[bot]";
+    context.eventName = "pull_request";
+    context.inputs.trustedActors = []; // Empty trusted actors
+
+    const result = await checkWritePermissions(
+      mockOctokit,
+      context,
+      mockExternalAuthContext,
+    );
+
+    // Should fail because trusted actors list is empty
+    expect(result).toBe(false);
+    expect(coreWarningSpy).toHaveBeenCalledWith(
+      "External token provided but actor dependabot[bot] is not a trusted actor - checking actor permissions",
+    );
+    expect(coreWarningSpy).toHaveBeenCalledWith(
+      "Actor has insufficient permissions: none",
+    );
+  });
+
+  test("should check actor permissions for Dependabot on non-pull_request events", async () => {
+    // Mock token with write permissions but actor has no permissions
+    const mockOctokit = createMockOctokit("none", { push: true });
+    const context = createContext();
+    context.actor = "dependabot[bot]";
+    context.eventName = "issue_comment"; // Not pull_request
+    context.inputs.trustedActors = ["dependabot[bot]"]; // Even with trust, wrong event
+
+    const result = await checkWritePermissions(
+      mockOctokit,
+      context,
+      mockExternalAuthContext,
+    );
+
+    // Should fail because it's not a pull_request event
+    expect(result).toBe(false);
+    expect(coreWarningSpy).toHaveBeenCalledWith(
+      "External token provided but actor dependabot[bot] is not a trusted actor - checking actor permissions",
+    );
+    expect(coreWarningSpy).toHaveBeenCalledWith(
+      "Actor has insufficient permissions: none",
+    );
+  });
+
+  test("should check actor permissions for non-trusted actors with external tokens", async () => {
+    // Mock token with write permissions but actor has read permissions only
+    const mockOctokit = createMockOctokit("read", { push: true });
+    const context = createContext();
+    context.actor = "external-contributor";
+
+    const result = await checkWritePermissions(
+      mockOctokit,
+      context,
+      mockExternalAuthContext,
+    );
+
+    // Should fail because actor doesn't have write permissions
+    expect(result).toBe(false);
+    expect(coreWarningSpy).toHaveBeenCalledWith(
+      "External token provided but actor external-contributor is not a trusted actor - checking actor permissions",
+    );
+    expect(coreInfoSpy).toHaveBeenCalledWith(
+      "Checking permissions for actor: external-contributor",
+    );
+    expect(coreWarningSpy).toHaveBeenCalledWith(
+      "Actor has insufficient permissions: read",
+    );
+  });
+
+  test("should fail for external tokens without write permissions", async () => {
+    // Mock token without write permissions
+    const mockOctokit = createMockOctokit("write", {
+      push: false,
+      admin: false,
+    });
+    const context = createContext();
+
+    const result = await checkWritePermissions(
+      mockOctokit,
+      context,
+      mockExternalAuthContext,
+    );
+
+    // Should fail due to insufficient token permissions
+    expect(result).toBe(false);
+    expect(coreWarningSpy).toHaveBeenCalledWith(
+      "Token has insufficient permissions",
+    );
+    // Actor check should NOT be called since token check failed
+    expect(coreInfoSpy).not.toHaveBeenCalledWith(
+      "Checking permissions for actor: test-user",
+    );
+  });
+
+  test("should handle 403 for external tokens", async () => {
+    const error = new Error("Forbidden");
+    (error as any).status = 403;
+    const mockOctokit = {
+      repos: {
+        get: async () => {
+          throw error;
+        },
+        getCollaboratorPermissionLevel: async () => ({
+          data: { permission: "admin" },
+        }),
+      },
+    } as any;
+    const context = createContext();
+
+    const result = await checkWritePermissions(
+      mockOctokit,
+      context,
+      mockExternalAuthContext,
+    );
+
+    expect(result).toBe(false);
+    expect(coreWarningSpy).toHaveBeenCalledWith(
+      "Token lacks read access to repository: Forbidden",
+    );
+    // Should not attempt actor check for external tokens
+    expect(coreInfoSpy).not.toHaveBeenCalledWith(
+      "Checking permissions for actor: test-user",
+    );
+  });
+
+  // === Edge Cases ===
+  test("should return false when permissions field is missing", async () => {
+    const mockOctokit = {
+      repos: {
+        get: async () => ({
+          data: {}, // No permissions field
+        }),
+        getCollaboratorPermissionLevel: async () => ({
+          data: { permission: "admin" },
+        }),
+      },
+    } as any;
+    const context = createContext();
+
+    const result = await checkWritePermissions(
+      mockOctokit,
+      context,
+      mockOidcAuthContext,
+    );
+
+    expect(result).toBe(false);
+    expect(coreWarningSpy).toHaveBeenCalledWith(
+      "No permissions field in repository response",
+    );
+  });
+
+  test("should handle multiple trusted actors correctly", async () => {
+    const mockOctokit = createMockOctokit("none", { push: true });
+    const context = createContext();
+    context.eventName = "pull_request";
+    context.inputs.trustedActors = ["dependabot[bot]", "github-actions[bot]"];
+
+    // Test first trusted actor
+    context.actor = "dependabot[bot]";
+    let result = await checkWritePermissions(
+      mockOctokit,
+      context,
+      mockExternalAuthContext,
+    );
+    expect(result).toBe(true);
+
+    // Test second trusted actor
+    context.actor = "github-actions[bot]";
+    result = await checkWritePermissions(
+      mockOctokit,
+      context,
+      mockExternalAuthContext,
+    );
+    expect(result).toBe(true);
+
+    // Test non-trusted actor
+    context.actor = "random-bot[bot]";
+    result = await checkWritePermissions(
+      mockOctokit,
+      context,
+      mockExternalAuthContext,
+    );
+    expect(result).toBe(false);
+  });
+
+  test("should return true when token has admin but not push (edge case)", async () => {
+    const mockOctokit = createMockOctokit("write", {
+      push: false,
+      admin: true,
+    });
+    const context = createContext();
+
+    const result = await checkWritePermissions(
+      mockOctokit,
+      context,
+      mockOidcAuthContext,
+    );
+
+    expect(result).toBe(true);
+  });
+
   test("should call API with correct parameters", async () => {
     let capturedParams: any;
     const mockOctokit = {
       repos: {
+        get: async () => ({
+          data: { permissions: { push: true } },
+        }),
         getCollaboratorPermissionLevel: async (params: any) => {
           capturedParams = params;
           return { data: { permission: "write" } };
@@ -158,7 +525,7 @@ describe("checkWritePermissions", () => {
     } as any;
     const context = createContext();
 
-    await checkWritePermissions(mockOctokit, context);
+    await checkWritePermissions(mockOctokit, context, mockOidcAuthContext);
 
     expect(capturedParams).toEqual({
       owner: "test-owner",
