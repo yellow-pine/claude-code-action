@@ -110,6 +110,10 @@ inputs:
     description: "Enable commit signing using GitHub's commit signature verification. When false, Claude uses standard git commands"
     required: false
     default: "false"
+  trusted_actors:
+    description: "List of trusted automation actors (e.g. 'dependabot[bot]') that can bypass actor permission checks on pull_request events when using external tokens. One actor per line."
+    required: false
+    default: ""
   experimental_allowed_domains:
     description: "Restrict network access to these domains only (newline-separated). If not set, no restrictions are applied. Provider domains are auto-detected."
     required: false

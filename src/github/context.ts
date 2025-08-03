@@ -77,6 +77,7 @@ type BaseContext = {
     useStickyComment: boolean;
     additionalPermissions: Map<string, string>;
     useCommitSigning: boolean;
+    trustedActors: string[];
   };
 };
 
@@ -136,6 +137,7 @@ export function parseGitHubContext(): GitHubContext {
         process.env.ADDITIONAL_PERMISSIONS ?? "",
       ),
       useCommitSigning: process.env.USE_COMMIT_SIGNING === "true",
+      trustedActors: parseMultilineInput(process.env.TRUSTED_ACTORS ?? ""),
     },
   };
 
