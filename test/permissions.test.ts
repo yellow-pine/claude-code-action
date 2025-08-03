@@ -263,14 +263,10 @@ describe("checkWritePermissions", () => {
     } as any;
     const context = createContext();
 
-    expect(
+    await expect(
       checkWritePermissions(mockOctokit, context, mockOidcAuthContext),
     ).rejects.toThrow(
       "Failed to check permissions for test-user: Error: API error",
-    );
-
-    expect(coreErrorSpy).toHaveBeenCalledWith(
-      "Failed to check permissions: Error: API error",
     );
   });
 
@@ -288,15 +284,13 @@ describe("checkWritePermissions", () => {
 
     await expect(
       checkWritePermissions(mockOctokit, context, mockOidcAuthContext),
-    ).rejects.toThrow("Rate limited while checking permissions");
-
-    expect(coreErrorSpy).toHaveBeenCalledWith(
+    ).rejects.toThrow(
       "Rate limited while checking permissions: API rate limit exceeded",
     );
   });
 
   // === External Token Tests (New Behavior) ===
-  test("should skip actor check for Dependabot when configured as trusted", async () => {
+  test("should skip actor check for Dependabot when configured as trusted and PR author matches", async () => {
     // Mock token with write permissions but actor has no permissions
     const mockOctokit = createMockOctokit("none", { push: true });
     const context = createContext();
@@ -304,6 +298,13 @@ describe("checkWritePermissions", () => {
     context.actor = "dependabot[bot]";
     context.eventName = "pull_request";
     context.inputs.trustedActors = ["dependabot[bot]"];
+    // Add pullRequest data with matching author
+    (context as any).payload = {
+      action: "opened",
+      pull_request: {
+        user: { login: "dependabot[bot]" },
+      },
+    };
 
     const result = await checkWritePermissions(
       mockOctokit,
@@ -311,18 +312,58 @@ describe("checkWritePermissions", () => {
       mockExternalAuthContext,
     );
 
-    // Should pass because Dependabot is in trusted actors list
+    // Should pass because Dependabot is in trusted actors list AND created the PR
     expect(result).toBe(true);
-    expect(coreInfoSpy).toHaveBeenCalledWith(
-      "Checking permissions with external token source",
+  });
+
+  test("should require actor check when trusted actor didn't create the PR", async () => {
+    // Mock token with write permissions but actor has no permissions
+    const mockOctokit = createMockOctokit("none", { push: true });
+    const context = createContext();
+    // Dependabot is the actor but someone else created the PR
+    context.actor = "dependabot[bot]";
+    context.eventName = "pull_request";
+    context.inputs.trustedActors = ["dependabot[bot]"];
+    // PR created by different user
+    (context as any).payload = {
+      action: "opened",
+      pull_request: {
+        user: { login: "some-other-user" },
+      },
+    };
+
+    const result = await checkWritePermissions(
+      mockOctokit,
+      context,
+      mockExternalAuthContext,
     );
-    expect(coreInfoSpy).toHaveBeenCalledWith(
-      "Trusted actor detected: dependabot[bot] on pull_request event - skipping actor permission check",
+
+    // Should fail because actor didn't create the PR
+    expect(result).toBe(false);
+  });
+
+  test("should require actor check for trusted actors on pull_request_target", async () => {
+    // Mock token with write permissions but actor has no permissions
+    const mockOctokit = createMockOctokit("none", { push: true });
+    const context = createContext();
+    context.actor = "dependabot[bot]";
+    (context as any).eventName = "pull_request_target"; // Dangerous event type
+    context.inputs.trustedActors = ["dependabot[bot]"];
+    (context as any).payload = {
+      action: "opened",
+      pull_request: {
+        user: { login: "dependabot[bot]" },
+      },
+    };
+
+    const result = await checkWritePermissions(
+      mockOctokit,
+      context,
+      mockExternalAuthContext,
     );
-    // Actor check should NOT be called for Dependabot
-    expect(coreInfoSpy).not.toHaveBeenCalledWith(
-      "Checking permissions for actor: dependabot[bot]",
-    );
+
+    // Should fail because pull_request_target is dangerous
+    expect(result).toBe(false);
   });
 
   test("should check actor permissions for Dependabot when not in trusted list", async () => {
@@ -342,12 +383,6 @@ describe("checkWritePermissions", () => {
 
     // Should fail because trusted actors list is empty
     expect(result).toBe(false);
-    expect(coreWarningSpy).toHaveBeenCalledWith(
-      "External token provided but actor dependabot[bot] is not a trusted actor - checking actor permissions",
-    );
-    expect(coreWarningSpy).toHaveBeenCalledWith(
-      "Actor has insufficient permissions: none",
-    );
   });
 
   test("should check actor permissions for Dependabot on non-pull_request events", async () => {
@@ -366,12 +401,6 @@ describe("checkWritePermissions", () => {
 
     // Should fail because it's not a pull_request event
     expect(result).toBe(false);
-    expect(coreWarningSpy).toHaveBeenCalledWith(
-      "External token provided but actor dependabot[bot] is not a trusted actor - checking actor permissions",
-    );
-    expect(coreWarningSpy).toHaveBeenCalledWith(
-      "Actor has insufficient permissions: none",
-    );
   });
 
   test("should check actor permissions for non-trusted actors with external tokens", async () => {
@@ -388,15 +417,6 @@ describe("checkWritePermissions", () => {
 
     // Should fail because actor doesn't have write permissions
     expect(result).toBe(false);
-    expect(coreWarningSpy).toHaveBeenCalledWith(
-      "External token provided but actor external-contributor is not a trusted actor - checking actor permissions",
-    );
-    expect(coreInfoSpy).toHaveBeenCalledWith(
-      "Checking permissions for actor: external-contributor",
-    );
-    expect(coreWarningSpy).toHaveBeenCalledWith(
-      "Actor has insufficient permissions: read",
-    );
   });
 
   test("should fail for external tokens without write permissions", async () => {
@@ -489,6 +509,12 @@ describe("checkWritePermissions", () => {
 
     // Test first trusted actor
     context.actor = "dependabot[bot]";
+    (context as any).payload = {
+      action: "opened",
+      pull_request: {
+        user: { login: "dependabot[bot]" },
+      },
+    };
     let result = await checkWritePermissions(
       mockOctokit,
       context,
@@ -498,6 +524,12 @@ describe("checkWritePermissions", () => {
 
     // Test second trusted actor
     context.actor = "github-actions[bot]";
+    (context as any).payload = {
+      action: "opened",
+      pull_request: {
+        user: { login: "github-actions[bot]" },
+      },
+    };
     result = await checkWritePermissions(
       mockOctokit,
       context,
