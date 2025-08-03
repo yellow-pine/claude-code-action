@@ -115,13 +115,15 @@ async function checkTokenWritePermissions(
 
     // Log rate limiting specifically for operational visibility
     if (error.status === 429) {
-      core.error(`Rate limited while checking permissions: ${error.message}`);
-      throw new Error(`Rate limited while checking permissions: ${error.message}`);
+      const message = `Rate limited while checking permissions: ${error.message}`;
+      core.error(message);
+      throw new Error(message);
     }
 
     // For other errors, rethrow as they might be network issues, etc.
-    core.error(`Failed to check token permissions: ${error}`);
-    throw new Error(`Failed to check token permissions: ${error}`);
+    const message = `Failed to check token permissions: ${error}`;
+    core.error(message);
+    throw new Error(message);
   }
 
   const permissions = response.data.permissions;
