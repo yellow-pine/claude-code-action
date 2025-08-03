@@ -28,7 +28,6 @@ const defaultInputs = {
   useStickyComment: false,
   additionalPermissions: new Map<string, string>(),
   useCommitSigning: false,
-  trustedActors: [] as string[],
 };
 
 const defaultRepository = {

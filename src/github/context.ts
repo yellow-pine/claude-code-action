@@ -77,7 +77,7 @@ type BaseContext = {
     useStickyComment: boolean;
     additionalPermissions: Map<string, string>;
     useCommitSigning: boolean;
-    trustedActors: string[];
+    trustedActors?: string[];
   };
 };
 

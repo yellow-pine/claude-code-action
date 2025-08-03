@@ -41,7 +41,6 @@ describe("checkContainsTrigger", () => {
           useStickyComment: false,
           additionalPermissions: new Map(),
           useCommitSigning: false,
-          trustedActors: [],
         },
       });
       expect(checkContainsTrigger(context)).toBe(true);
@@ -75,7 +74,6 @@ describe("checkContainsTrigger", () => {
           useStickyComment: false,
           additionalPermissions: new Map(),
           useCommitSigning: false,
-          trustedActors: [],
         },
       });
       expect(checkContainsTrigger(context)).toBe(false);
@@ -293,7 +291,6 @@ describe("checkContainsTrigger", () => {
           useStickyComment: false,
           additionalPermissions: new Map(),
           useCommitSigning: false,
-          trustedActors: [],
         },
       });
       expect(checkContainsTrigger(context)).toBe(true);
@@ -328,7 +325,6 @@ describe("checkContainsTrigger", () => {
           useStickyComment: false,
           additionalPermissions: new Map(),
           useCommitSigning: false,
-          trustedActors: [],
         },
       });
       expect(checkContainsTrigger(context)).toBe(true);
@@ -363,7 +359,6 @@ describe("checkContainsTrigger", () => {
           useStickyComment: false,
           additionalPermissions: new Map(),
           useCommitSigning: false,
-          trustedActors: [],
         },
       });
       expect(checkContainsTrigger(context)).toBe(false);

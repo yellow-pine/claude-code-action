@@ -37,7 +37,6 @@ describe("prepareMcpConfig", () => {
       useStickyComment: false,
       additionalPermissions: new Map(),
       useCommitSigning: false,
-      trustedActors: [],
     },
   };
 

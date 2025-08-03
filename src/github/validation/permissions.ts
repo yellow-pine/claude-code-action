@@ -35,7 +35,7 @@ export async function checkWritePermissions(
     authContext,
     actor,
     eventName,
-    inputs.trustedActors,
+    inputs.trustedActors || [],
     context,
   );
 
