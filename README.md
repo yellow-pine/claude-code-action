@@ -115,6 +115,28 @@ If you prefer not to install the official Claude app, you can create your own Gi
 
 For more information on creating GitHub Apps, see the [GitHub documentation](https://docs.github.com/en/apps/creating-github-apps).
 
+### Working with Dependabot
+
+When using a custom GitHub App token with Dependabot PRs, you may encounter permission errors because Dependabot is not a repository collaborator. To allow Dependabot to trigger Claude actions on `pull_request` events, use the `trusted_actors` parameter:
+
+```yaml
+- uses: anthropics/claude-code-action@beta
+  with:
+    anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+    github_token: ${{ steps.app-token.outputs.token }}
+    trusted_actors: |
+      dependabot[bot]
+    # ... other configuration
+```
+
+**Important security notes:**
+- Only actors listed in `trusted_actors` can bypass actor permission checks
+- This bypass only works on `pull_request` events (not `pull_request_target`)
+- The external token must still have write permissions to the repository
+- Leave `trusted_actors` empty (default) to maintain the strictest security
+
+This feature is designed specifically for automation bots like Dependabot that need to trigger actions but aren't repository collaborators.
+
 ## 📚 FAQ
 
 Having issues or questions? Check out our [Frequently Asked Questions](./FAQ.md) for solutions to common problems and detailed explanations of Claude's capabilities and limitations.
@@ -197,6 +219,7 @@ jobs:
 | `additional_permissions`       | Additional permissions to enable. Currently supports 'actions: read' for viewing workflow results                                     | No       | ""        |
 | `experimental_allowed_domains` | Restrict network access to these domains only (newline-separated).                                                                    | No       | ""        |
 | `use_commit_signing`           | Enable commit signing using GitHub's commit signature verification. When false, Claude uses standard git commands                     | No       | `false`   |
+| `trusted_actors`               | List of trusted actors (e.g. 'dependabot[bot]') that can bypass actor permission checks on pull_request events when using external tokens. One actor per line. | No       | ""        |
 
 \*Required when using direct Anthropic API (default and when not using Bedrock or Vertex)
 
