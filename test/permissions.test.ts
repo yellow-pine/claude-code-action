@@ -274,6 +274,27 @@ describe("checkWritePermissions", () => {
     );
   });
 
+  test("should throw error with specific message for rate limiting (429)", async () => {
+    const error = new Error("API rate limit exceeded");
+    (error as any).status = 429;
+    const mockOctokit = {
+      repos: {
+        get: async () => {
+          throw error;
+        },
+      },
+    } as any;
+    const context = createContext();
+
+    await expect(
+      checkWritePermissions(mockOctokit, context, mockOidcAuthContext),
+    ).rejects.toThrow("Rate limited while checking permissions");
+
+    expect(coreErrorSpy).toHaveBeenCalledWith(
+      "Rate limited while checking permissions: API rate limit exceeded",
+    );
+  });
+
   // === External Token Tests (New Behavior) ===
   test("should skip actor check for Dependabot when configured as trusted", async () => {
     // Mock token with write permissions but actor has no permissions
