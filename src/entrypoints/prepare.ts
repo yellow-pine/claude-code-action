@@ -7,6 +7,7 @@
 
 import * as core from "@actions/core";
 import { setupGitHubToken } from "../github/token";
+import { type AuthContext } from "../github/auth-context";
 import { checkWritePermissions } from "../github/validation/permissions";
 import { createOctokit } from "../github/api/client";
 import { parseGitHubContext, isEntityContext } from "../github/context";
@@ -26,22 +27,13 @@ async function run() {
     const validatedMode: ModeName = modeInput;
 
     // Step 2: Setup GitHub token based on mode
-    let githubToken: string;
+    let authContext: AuthContext;
     if (validatedMode === "experimental-review") {
-      // For experimental-review mode, use the default GitHub Action token
-      githubToken = process.env.DEFAULT_WORKFLOW_TOKEN || "";
-      if (!githubToken) {
-        throw new Error(
-          "DEFAULT_WORKFLOW_TOKEN not found for experimental-review mode",
-        );
-      }
-      console.log("Using default GitHub Action token for review mode");
-      core.setOutput("GITHUB_TOKEN", githubToken);
+      authContext = await setupGitHubToken("DEFAULT_WORKFLOW_TOKEN");
     } else {
-      // For other modes, use the existing token exchange
-      githubToken = await setupGitHubToken();
+      authContext = await setupGitHubToken();
     }
-    const octokit = createOctokit(githubToken);
+    const octokit = createOctokit(authContext.token);
 
     // Step 2: Parse GitHub context (once for all operations)
     const context = parseGitHubContext();
@@ -51,11 +43,11 @@ async function run() {
       const hasWritePermissions = await checkWritePermissions(
         octokit.rest,
         context,
+        authContext,
       );
+
       if (!hasWritePermissions) {
-        throw new Error(
-          "Actor does not have write permissions to the repository",
-        );
+        throw new Error("Insufficient permissions to write to the repository");
       }
     }
 
@@ -76,7 +68,7 @@ async function run() {
       context,
       octokit,
       mode,
-      githubToken,
+      githubToken: authContext.token,
     });
 
     // Set the MCP config output

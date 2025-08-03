@@ -2,6 +2,11 @@
 
 import * as core from "@actions/core";
 import { retryWithBackoff } from "../utils/retry";
+import {
+  type AuthContext,
+  createAuthContext,
+  TokenSource,
+} from "./auth-context";
 
 async function getOidcToken(): Promise<string> {
   try {
@@ -52,17 +57,28 @@ async function exchangeForAppToken(oidcToken: string): Promise<string> {
   return appToken;
 }
 
-export async function setupGitHubToken(): Promise<string> {
+export async function setupGitHubToken(
+  providedEnvVarName?: string,
+): Promise<AuthContext> {
   try {
-    // Check if GitHub token was provided as override
-    const providedToken = process.env.OVERRIDE_GITHUB_TOKEN;
+    // Check for environment variable token
+    const envVarName = providedEnvVarName || "OVERRIDE_GITHUB_TOKEN";
+    const token = process.env[envVarName];
 
-    if (providedToken) {
-      console.log("Using provided GITHUB_TOKEN for authentication");
-      core.setOutput("GITHUB_TOKEN", providedToken);
-      return providedToken;
+    if (token) {
+      console.log(`Using ${envVarName} for authentication`);
+      core.setOutput("GITHUB_TOKEN", token);
+      return createAuthContext(token, TokenSource.EXTERNAL);
     }
 
+    // If a specific env var was requested but not found, fail early
+    // This is important for modes like experimental-review that require
+    // a specific token (DEFAULT_WORKFLOW_TOKEN) to function correctly
+    if (providedEnvVarName) {
+      throw new Error(`${providedEnvVarName} not found`);
+    }
+
+    // Fall back to OIDC token exchange
     console.log("Requesting OIDC token...");
     const oidcToken = await retryWithBackoff(() => getOidcToken());
     console.log("OIDC token successfully obtained");
@@ -75,7 +91,7 @@ export async function setupGitHubToken(): Promise<string> {
 
     console.log("Using GITHUB_TOKEN from OIDC");
     core.setOutput("GITHUB_TOKEN", appToken);
-    return appToken;
+    return createAuthContext(appToken, TokenSource.OIDC);
   } catch (error) {
     core.setFailed(
       `Failed to setup GitHub token: ${error}.\n\nIf you instead wish to use this action with a custom GitHub token or custom GitHub app, provide a \`github_token\` in the \`uses\` section of the app in your workflow yml file.`,
