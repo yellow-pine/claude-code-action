@@ -75,7 +75,7 @@ Execution steps:
 
 - **Token Management** (`token.ts`): OIDC token exchange and GitHub App authentication
 - **Permission Validation** (`validation/permissions.ts`): Write access verification
-- **Actor Validation** (`validation/actor.ts`): Human vs bot detection
+- **Actor Validation** (`validation/actor.ts`): Authorized actor detection (humans and trusted bots)
 
 ### Project Structure
 
@@ -107,6 +107,7 @@ src/
 - Uses GitHub OIDC token exchange for secure authentication
 - Supports custom GitHub Apps via `APP_ID` and `APP_PRIVATE_KEY`
 - Falls back to official Claude GitHub App if no custom app provided
+- External tokens can specify `trusted_bots` to allow certain bots (e.g., Dependabot) to trigger Claude
 
 ### MCP Server Architecture
 
