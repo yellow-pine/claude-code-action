@@ -90,6 +90,32 @@ If you prefer not to install the official Claude app, you can create your own Gi
 
 For more information on creating GitHub Apps, see the [GitHub documentation](https://docs.github.com/en/apps/creating-github-apps).
 
+## Working with Dependabot
+
+When using a custom GitHub App token with Dependabot PRs, you may encounter permission errors because Dependabot is not a repository collaborator. To allow Dependabot to trigger Claude actions on `pull_request` events, use the `trusted_bots` parameter:
+
+```yaml
+- uses: anthropics/claude-code-action@beta
+  with:
+    anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+    github_token: ${{ steps.app-token.outputs.token }}
+    trusted_bots: |
+      dependabot[bot]
+    # ... other configuration
+```
+
+**Important security notes:**
+
+- Only actors listed in `trusted_bots` can bypass actor permission checks
+- This bypass only works on `pull_request` events (not `pull_request_target`)
+- The external token must still have write permissions to the repository
+- The PR must be created by the trusted actor (prevents confused deputy attacks)
+- Leave `trusted_bots` empty (default) to maintain the strictest security
+
+⚠️ **Security Warning**: Never use `trusted_bots` with `pull_request_target` events, as this runs with elevated permissions and could allow malicious code execution. The action will always require full permission checks for `pull_request_target` events regardless of `trusted_bots` configuration.
+
+This feature is designed specifically for automation bots like Dependabot that need to trigger actions but aren't repository collaborators.
+
 ## Security Best Practices
 
 **⚠️ IMPORTANT: Never commit API keys directly to your repository! Always use GitHub Actions secrets.**
