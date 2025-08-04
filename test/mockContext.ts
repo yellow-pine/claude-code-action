@@ -2,6 +2,7 @@ import type {
   ParsedGitHubContext,
   AutomationContext,
 } from "../src/github/context";
+import { TokenSource } from "../src/github/token";
 import type {
   IssuesEvent,
   IssueCommentEvent,
@@ -28,6 +29,7 @@ const defaultInputs = {
   useStickyComment: false,
   additionalPermissions: new Map<string, string>(),
   useCommitSigning: false,
+  trustedBots: [] as string[],
 };
 
 const defaultRepository = {
@@ -414,4 +416,57 @@ export const mockPullRequestReviewCommentContext: ParsedGitHubContext = {
   entityNumber: 999,
   isPR: true,
   inputs: defaultInputs,
+};
+
+// Token contexts for authentication testing
+export const mockOidcTokenContext = {
+  token: "test-token",
+  source: TokenSource.OIDC,
+};
+
+export const mockExternalTokenContext = {
+  token: "github-app-token",
+  source: TokenSource.EXTERNAL,
+};
+
+// GitHub API mocking utilities
+export const createMockOctokit = (
+  permission: string,
+  tokenPermissions?: { push?: boolean; admin?: boolean },
+  options?: {
+    failLabelCreate?: boolean;
+    labelCreateError?: { status: number; message: string };
+    collaboratorPermission?: string;
+  },
+) => {
+  return {
+    repos: {
+      getCollaboratorPermissionLevel: async () => ({
+        data: { permission: options?.collaboratorPermission || permission },
+      }),
+      ...(tokenPermissions && {
+        get: async () => ({
+          data: { permissions: tokenPermissions },
+        }),
+      }),
+    },
+    issues: {
+      createLabel: async () => {
+        if (options?.failLabelCreate) {
+          const error = new Error(
+            options.labelCreateError?.message || "Failed",
+          );
+          (error as any).status = options.labelCreateError?.status || 403;
+          throw error;
+        }
+        return { data: {} };
+      },
+      deleteLabel: async () => ({ data: {} }),
+    },
+    users: {
+      getByUsername: async ({ username }: { username: string }) => ({
+        data: { type: "User", login: username },
+      }),
+    },
+  } as any;
 };
