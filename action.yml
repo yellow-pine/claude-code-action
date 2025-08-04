@@ -110,6 +110,10 @@ inputs:
     description: "Enable commit signing using GitHub's commit signature verification. When false, Claude uses standard git commands"
     required: false
     default: "false"
+  trusted_bots:
+    description: "Trusted bots that bypass permission checks on pull_request events with external tokens (e.g. 'dependabot[bot]')"
+    required: false
+    default: ""
   experimental_allowed_domains:
     description: "Restrict network access to these domains only (newline-separated). If not set, no restrictions are applied. Provider domains are auto-detected."
     required: false
@@ -161,6 +165,7 @@ runs:
         DEFAULT_WORKFLOW_TOKEN: ${{ github.token }}
         ADDITIONAL_PERMISSIONS: ${{ inputs.additional_permissions }}
         USE_COMMIT_SIGNING: ${{ inputs.use_commit_signing }}
+        TRUSTED_BOTS: ${{ inputs.trusted_bots }}
 
     - name: Install Base Action Dependencies
       if: steps.prepare.outputs.contains_trigger == 'true'
