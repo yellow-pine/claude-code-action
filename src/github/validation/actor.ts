@@ -67,21 +67,17 @@ export function validateTrustedBot(
   // Non-standard bot names (without '[bot]' suffix) are considered suspicious and require full validation
   const senderType = context.payload?.sender?.type;
 
-  if (actor.endsWith(BOT_SUFFIX)) {
-    if (senderType !== SENDER_TYPE_BOT) {
-      return {
-        isValid: false,
-        reason: `Account ${actor} claims to be a bot but sender type is '${senderType}' (expected '${SENDER_TYPE_BOT}') - requiring permission check`,
-      };
-    }
-  } else {
-    // If actor doesn't end with [bot] but sender claims to be a bot, this is suspicious
-    if (senderType === SENDER_TYPE_BOT) {
-      return {
-        isValid: false,
-        reason: `Non-standard bot name '${actor}' with sender type '${SENDER_TYPE_BOT}' - requiring permission check for safety`,
-      };
-    }
+  // Check if bot suffix indicator matches sender type
+  const hasBotSuffix = actor.endsWith(BOT_SUFFIX);
+  const isBotSender = senderType === SENDER_TYPE_BOT;
+  
+  if (hasBotSuffix !== isBotSender) {
+    return {
+      isValid: false,
+      reason: hasBotSuffix
+        ? `Account ${actor} claims to be a bot but sender type is '${senderType}' (expected '${SENDER_TYPE_BOT}') - requiring permission check`
+        : `Non-standard bot name '${actor}' with sender type '${SENDER_TYPE_BOT}' - requiring permission check for safety`,
+    };
   }
 
   // Security check for pull_request_target
