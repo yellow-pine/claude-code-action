@@ -70,7 +70,7 @@ export function validateTrustedBot(
   // Check if bot suffix indicator matches sender type
   const hasBotSuffix = actor.endsWith(BOT_SUFFIX);
   const isBotSender = senderType === SENDER_TYPE_BOT;
-  
+
   if (hasBotSuffix !== isBotSender) {
     return {
       isValid: false,
