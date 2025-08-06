@@ -124,6 +124,8 @@ The following environment variables can be used to configure the action:
 | -------------- | ----------------------------------------------------- | ------- |
 | `NODE_VERSION` | Node.js version to use (e.g., '18.x', '20.x', '22.x') | '18.x'  |
 
+**Note:** The action synchronizes `GITHUB_TOKEN` and `GH_TOKEN` when either is present (`GITHUB_TOKEN` takes precedence). This ensures `gh` CLI and other tools work regardless of which token name is provided. The `GH_TOKEN` environment variable will override any existing `gh` CLI authentication.
+
 Example usage:
 
 ```yaml

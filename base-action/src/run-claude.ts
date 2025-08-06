@@ -62,6 +62,24 @@ function parseCustomEnvVars(claudeEnv?: string): Record<string, string> {
   return customEnv;
 }
 
+/**
+ * Ensures both GITHUB_TOKEN and GH_TOKEN are set if either exists.
+ * gh CLI uses GH_TOKEN, MCP servers use GITHUB_TOKEN.
+ */
+export function synchronizeGitHubTokens(
+  env: Record<string, string | undefined>,
+): Record<string, string | undefined> {
+  const githubToken = env.GITHUB_TOKEN || env.GH_TOKEN;
+  if (githubToken) {
+    return {
+      ...env,
+      GITHUB_TOKEN: githubToken,
+      GH_TOKEN: githubToken,
+    };
+  }
+  return env;
+}
+
 export function prepareRunConfig(
   promptPath: string,
   options: ClaudeOptions,
@@ -164,10 +182,10 @@ export async function runClaude(promptPath: string, options: ClaudeOptions) {
 
   const claudeProcess = spawn("claude", config.claudeArgs, {
     stdio: ["pipe", "pipe", "inherit"],
-    env: {
+    env: synchronizeGitHubTokens({
       ...process.env,
       ...config.env,
-    },
+    }),
   });
 
   // Handle Claude process errors

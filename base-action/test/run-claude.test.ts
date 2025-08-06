@@ -1,7 +1,11 @@
 #!/usr/bin/env bun
 
 import { describe, test, expect } from "bun:test";
-import { prepareRunConfig, type ClaudeOptions } from "../src/run-claude";
+import {
+  prepareRunConfig,
+  synchronizeGitHubTokens,
+  type ClaudeOptions,
+} from "../src/run-claude";
 
 describe("prepareRunConfig", () => {
   test("should prepare config with basic arguments", () => {
@@ -293,5 +297,73 @@ describe("prepareRunConfig", () => {
       const prepared = prepareRunConfig("/tmp/test-prompt.txt", options);
       expect(prepared.env).toEqual({});
     });
+  });
+});
+
+describe("synchronizeGitHubTokens", () => {
+  test("should set both tokens when only GITHUB_TOKEN exists", () => {
+    const env = {
+      GITHUB_TOKEN: "test-github-token",
+      OTHER_VAR: "other-value",
+    };
+
+    const result = synchronizeGitHubTokens(env);
+
+    expect(result.GITHUB_TOKEN).toBe("test-github-token");
+    expect(result.GH_TOKEN).toBe("test-github-token");
+    expect(result.OTHER_VAR).toBe("other-value");
+  });
+
+  test("should set both tokens when only GH_TOKEN exists", () => {
+    const env = {
+      GH_TOKEN: "test-gh-token",
+      OTHER_VAR: "other-value",
+    };
+
+    const result = synchronizeGitHubTokens(env);
+
+    expect(result.GITHUB_TOKEN).toBe("test-gh-token");
+    expect(result.GH_TOKEN).toBe("test-gh-token");
+    expect(result.OTHER_VAR).toBe("other-value");
+  });
+
+  test("should prefer GITHUB_TOKEN when both exist", () => {
+    const env = {
+      GITHUB_TOKEN: "github-token-primary",
+      GH_TOKEN: "gh-token-secondary",
+      OTHER_VAR: "other-value",
+    };
+
+    const result = synchronizeGitHubTokens(env);
+
+    expect(result.GITHUB_TOKEN).toBe("github-token-primary");
+    expect(result.GH_TOKEN).toBe("github-token-primary");
+    expect(result.OTHER_VAR).toBe("other-value");
+  });
+
+  test("should handle undefined values in env", () => {
+    const env: Record<string, string | undefined> = {
+      GITHUB_TOKEN: undefined,
+      GH_TOKEN: "gh-token",
+      OTHER_VAR: undefined,
+    };
+
+    const result = synchronizeGitHubTokens(env);
+
+    expect(result.GITHUB_TOKEN).toBe("gh-token");
+    expect(result.GH_TOKEN).toBe("gh-token");
+    expect(result.OTHER_VAR).toBeUndefined();
+  });
+
+  test("should return new object without mutating original", () => {
+    const env: Record<string, string | undefined> = {
+      GITHUB_TOKEN: "test-token",
+    };
+
+    const result = synchronizeGitHubTokens(env);
+
+    expect(result).not.toBe(env);
+    expect(env.GH_TOKEN).toBeUndefined();
+    expect(result.GH_TOKEN).toBe("test-token");
   });
 });
