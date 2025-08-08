@@ -33,15 +33,6 @@ export async function checkHumanActor(
         `Bots are not allowed on pull_request_target events for security reasons. Actor: ${githubContext.actor}`,
       );
     }
-    
-    // Security: Verify bot authenticity
-    // Check that accounts ending with [bot] actually have Bot sender type
-    const senderType = (githubContext.payload as any)?.sender?.type;
-    if (githubContext.actor.endsWith("[bot]") && senderType && senderType !== "Bot") {
-      throw new Error(
-        `Security violation: ${githubContext.actor} claims to be a bot but sender type is '${senderType}'. This may be a spoofing attempt.`,
-      );
-    }
 
     // Check if all bots are allowed
     if (allowedBots.trim() === "*") {
