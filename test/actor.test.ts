@@ -93,4 +93,28 @@ describe("checkHumanActor", () => {
       "Workflow initiated by non-human actor: other-bot (type: Bot). Add bot to allowed_bots list or use '*' to allow all bots.",
     );
   });
+
+  test("should block bots on pull_request_target events", async () => {
+    const mockOctokit = createMockOctokit("Bot");
+    const context = createMockContext();
+    context.actor = "dependabot[bot]";
+    context.eventName = "pull_request_target" as any;
+    context.inputs.allowedBots = "dependabot[bot]";
+
+    await expect(checkHumanActor(mockOctokit, context)).rejects.toThrow(
+      "Bots are not allowed on pull_request_target events for security reasons",
+    );
+  });
+
+  test("should detect bot spoofing attempts", async () => {
+    const mockOctokit = createMockOctokit("Bot");
+    const context = createMockContext();
+    context.actor = "fake-bot[bot]";
+    context.inputs.allowedBots = "*";
+    context.payload = { sender: { type: "User" } } as any;
+
+    await expect(checkHumanActor(mockOctokit, context)).rejects.toThrow(
+      "Security violation: fake-bot[bot] claims to be a bot but sender type is 'User'",
+    );
+  });
 });

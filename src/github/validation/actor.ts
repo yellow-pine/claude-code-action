@@ -25,6 +25,23 @@ export async function checkHumanActor(
   // Check bot permissions if actor is not a User
   if (actorType !== "User") {
     const allowedBots = githubContext.inputs.allowedBots;
+    
+    // Security: Never allow bots on pull_request_target events
+    // This event runs with elevated permissions and could be exploited
+    if (githubContext.eventName === "pull_request_target") {
+      throw new Error(
+        `Bots are not allowed on pull_request_target events for security reasons. Actor: ${githubContext.actor}`,
+      );
+    }
+    
+    // Security: Verify bot authenticity
+    // Check that accounts ending with [bot] actually have Bot sender type
+    const senderType = (githubContext.payload as any)?.sender?.type;
+    if (githubContext.actor.endsWith("[bot]") && senderType && senderType !== "Bot") {
+      throw new Error(
+        `Security violation: ${githubContext.actor} claims to be a bot but sender type is '${senderType}'. This may be a spoofing attempt.`,
+      );
+    }
 
     // Check if all bots are allowed
     if (allowedBots.trim() === "*") {
