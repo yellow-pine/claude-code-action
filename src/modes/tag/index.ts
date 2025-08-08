@@ -1,7 +1,7 @@
 import * as core from "@actions/core";
 import type { Mode, ModeOptions, ModeResult } from "../types";
 import { checkContainsTrigger } from "../../github/validation/trigger";
-import { checkHumanActor } from "../../github/validation/actor";
+import { checkAllowedActor } from "../../github/validation/actor";
 import { createInitialComment } from "../../github/operations/comments/create-initial";
 import { setupBranch } from "../../github/operations/branch";
 import { configureGitAuth } from "../../github/operations/git-config";
@@ -63,8 +63,8 @@ export const tagMode: Mode = {
       throw new Error("Tag mode requires entity context");
     }
 
-    // Check if actor is human
-    await checkHumanActor(octokit.rest, context);
+    // Check if actor is allowed (human or allowed bot)
+    await checkAllowedActor(octokit.rest, context);
 
     // Create initial tracking comment
     const commentData = await createInitialComment(octokit.rest, context);

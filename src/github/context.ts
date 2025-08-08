@@ -7,6 +7,18 @@ import type {
   PullRequestReviewEvent,
   PullRequestReviewCommentEvent,
 } from "@octokit/webhooks-types";
+
+// Repository interface matching GitHub Actions context.repo structure
+// No equivalent interface is exported by @actions/github
+export type Repository = typeof github.context.repo;
+
+// Constants for GitHub actor validation
+export const BOT_SUFFIX = "[bot]";
+export const SENDER_TYPE_BOT = "Bot";
+
+// Constants for permission levels
+export const WRITE_PERMISSION_LEVELS = ["admin", "write"] as const;
+
 // Custom types for GitHub Actions events that aren't webhooks
 export type WorkflowDispatchEvent = {
   action?: never;
