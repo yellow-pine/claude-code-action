@@ -75,7 +75,7 @@ Execution steps:
 
 - **Token Management** (`token.ts`): OIDC token exchange and GitHub App authentication
 - **Permission Validation** (`validation/permissions.ts`): Write access verification
-- **Actor Validation** (`validation/actor.ts`): Allowed actor detection (humans and allowed bots)
+- **Actor Validation** (`validation/actor.ts`): Human vs bot detection
 
 ### Project Structure
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { describe, test, expect } from "bun:test";
-import { checkAllowedActor } from "../src/github/validation/actor";
+import { checkHumanActor } from "../src/github/validation/actor";
 import type { Octokit } from "@octokit/rest";
 import { createMockContext } from "./mockContext";
 
@@ -17,14 +17,14 @@ function createMockOctokit(userType: string): Octokit {
   } as unknown as Octokit;
 }
 
-describe("checkAllowedActor", () => {
+describe("checkHumanActor", () => {
   test("should pass for human actor", async () => {
     const mockOctokit = createMockOctokit("User");
     const context = createMockContext();
     context.actor = "human-user";
 
     await expect(
-      checkAllowedActor(mockOctokit, context),
+      checkHumanActor(mockOctokit, context),
     ).resolves.toBeUndefined();
   });
 
@@ -34,7 +34,7 @@ describe("checkAllowedActor", () => {
     context.actor = "test-bot[bot]";
     context.inputs.allowedBots = "";
 
-    await expect(checkAllowedActor(mockOctokit, context)).rejects.toThrow(
+    await expect(checkHumanActor(mockOctokit, context)).rejects.toThrow(
       "Workflow initiated by non-human actor: test-bot (type: Bot). Add bot to allowed_bots list or use '*' to allow all bots.",
     );
   });
@@ -46,7 +46,7 @@ describe("checkAllowedActor", () => {
     context.inputs.allowedBots = "*";
 
     await expect(
-      checkAllowedActor(mockOctokit, context),
+      checkHumanActor(mockOctokit, context),
     ).resolves.toBeUndefined();
   });
 
@@ -57,7 +57,7 @@ describe("checkAllowedActor", () => {
     context.inputs.allowedBots = "dependabot[bot],renovate[bot]";
 
     await expect(
-      checkAllowedActor(mockOctokit, context),
+      checkHumanActor(mockOctokit, context),
     ).resolves.toBeUndefined();
   });
 
@@ -68,7 +68,7 @@ describe("checkAllowedActor", () => {
     context.inputs.allowedBots = "dependabot,renovate";
 
     await expect(
-      checkAllowedActor(mockOctokit, context),
+      checkHumanActor(mockOctokit, context),
     ).resolves.toBeUndefined();
   });
 
@@ -78,7 +78,7 @@ describe("checkAllowedActor", () => {
     context.actor = "other-bot[bot]";
     context.inputs.allowedBots = "dependabot[bot],renovate[bot]";
 
-    await expect(checkAllowedActor(mockOctokit, context)).rejects.toThrow(
+    await expect(checkHumanActor(mockOctokit, context)).rejects.toThrow(
       "Workflow initiated by non-human actor: other-bot (type: Bot). Add bot to allowed_bots list or use '*' to allow all bots.",
     );
   });
@@ -89,7 +89,7 @@ describe("checkAllowedActor", () => {
     context.actor = "other-bot[bot]";
     context.inputs.allowedBots = "dependabot,renovate";
 
-    await expect(checkAllowedActor(mockOctokit, context)).rejects.toThrow(
+    await expect(checkHumanActor(mockOctokit, context)).rejects.toThrow(
       "Workflow initiated by non-human actor: other-bot (type: Bot). Add bot to allowed_bots list or use '*' to allow all bots.",
     );
   });

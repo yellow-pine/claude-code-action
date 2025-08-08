@@ -1,12 +1,12 @@
 #!/usr/bin/env bun
 
 /**
- * Prepare the Claude action by checking trigger conditions, verifying allowed actor,
+ * Prepare the Claude action by checking trigger conditions, verifying human actor,
  * and creating the initial tracking comment
  */
 
 import * as core from "@actions/core";
-import { setupTokenContext } from "../github/token";
+import { setupGitHubToken } from "../github/token";
 import { checkWritePermissions } from "../github/validation/permissions";
 import { createOctokit } from "../github/api/client";
 import { parseGitHubContext, isEntityContext } from "../github/context";
@@ -26,10 +26,21 @@ async function run() {
     const validatedMode: ModeName = modeInput;
 
     // Step 2: Setup GitHub token based on mode
-    const tokenContext = await setupTokenContext(
-      validatedMode === "experimental-review" && "DEFAULT_WORKFLOW_TOKEN",
-    );
-    const githubToken = tokenContext.token;
+    let githubToken: string;
+    if (validatedMode === "experimental-review") {
+      // For experimental-review mode, use the default GitHub Action token
+      githubToken = process.env.DEFAULT_WORKFLOW_TOKEN || "";
+      if (!githubToken) {
+        throw new Error(
+          "DEFAULT_WORKFLOW_TOKEN not found for experimental-review mode",
+        );
+      }
+      console.log("Using default GitHub Action token for review mode");
+      core.setOutput("GITHUB_TOKEN", githubToken);
+    } else {
+      // For other modes, use the existing token exchange
+      githubToken = await setupGitHubToken();
+    }
     const octokit = createOctokit(githubToken);
 
     // Step 2: Parse GitHub context (once for all operations)
@@ -40,7 +51,6 @@ async function run() {
       const hasWritePermissions = await checkWritePermissions(
         octokit.rest,
         context,
-        tokenContext,
       );
       if (!hasWritePermissions) {
         throw new Error(
